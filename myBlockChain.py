@@ -34,12 +34,12 @@ g_nodeList = {'127.0.0.1':'8668'} # trusted server list, should be checked manua
 class Block:
 
     def __init__(self, index, previousHash, timestamp, data, currentHash, proof ):
-        self.index = index
-        self.previousHash = previousHash
-        self.timestamp = timestamp
-        self.data = data
-        self.currentHash = currentHash
-        self.proof = proof
+        self.index = index    # 블록의 높이
+        self.previousHash = previousHash    # 이전 블록의 해시값(이전 블록의 연결고리, 스냅샷)
+        self.timestamp = timestamp    # 블록 생성 시점
+        self.data = data    # 거래 데이터
+        self.currentHash = currentHash    # 현재 블록의 해시값
+        self.proof = proof    # 작업 증명값(채굴 횟수)
 
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
@@ -47,11 +47,11 @@ class Block:
 class txData:
 
     def __init__(self, commitYN, sender, amount, receiver, uuid):
-        self.commitYN = commitYN
-        self.sender = sender
-        self.amount = amount
-        self.receiver = receiver
-        self.uuid =  uuid
+        self.commitYN = commitYN    # 블록 포함 여부(확증 여부)
+        self.sender = sender    # 송신자
+        self.amount = amount    # 금액
+        self.receiver = receiver    # 수신자
+        self.uuid =  uuid    # 거래 고유 번호
 
 def generateGenesisBlock():
     print("generateGenesisBlock is called")
@@ -72,9 +72,10 @@ def calculateHashForBlock(block):
 def getLatestBlock(blockchain):
     return blockchain[len(blockchain) - 1]
 
+# 블록 채굴
 def generateNextBlock(blockchain, blockData, timestamp, proof):
-    previousBlock = getLatestBlock(blockchain)
-    nextIndex = int(previousBlock.index) + 1
+    previousBlock = getLatestBlock(blockchain)     # 블록체인의 가장 마지막 블록정보를 조회
+    nextIndex = int(previousBlock.index) + 1    # 채굴할 블록의 번호는 마지막 블록 번호 + 1
     nextTimestamp = timestamp
     nextHash = calculateHash(nextIndex, previousBlock.currentHash, nextTimestamp, blockData, proof)
     # index, previousHash, timestamp, data, currentHash, proof
@@ -87,6 +88,8 @@ def generateNextBlock(blockchain, blockData, timestamp, proof):
 # After executing the desired operation, changed to release the lock.(lock.release())
 # Reason for time.sleep ():
 # prevents server overload due to repeated error message output and gives 3 seconds of delay to allow time for other users to wait without opening file while editing and saving csv file.
+
+# 2_2 블록체인 조회 및 추가
 def writeBlockchain(blockchain):
 
     blockchainList = []
@@ -138,15 +141,15 @@ def writeBlockchain(blockchain):
                     lock.release()
         else:
             print("Blockchain is empty")
-
+# 블록체인 조회 및 추가
 def readBlockchain(blockchainFilePath, mode = 'internal'):
     print("readBlockchain")
     importedBlockchain = []
 
     try:
-        with open(blockchainFilePath, 'r',  newline='') as file:
+        with open(blockchainFilePath, 'r',  newline='') as file:    # 기존 블록체인 조회
             blockReader = csv.reader(file)
-            for line in blockReader:
+            for line in blockReader:    # 파일 조회하여 리스트형 변수에 담기
                 block = Block(line[0], line[1], line[2], line[3], line[4], line[5])
                 importedBlockchain.append(block)
 
@@ -154,7 +157,7 @@ def readBlockchain(blockchainFilePath, mode = 'internal'):
 
         return importedBlockchain
 
-    except:
+    except:    # 파일이 없거나 읽기 오류 발생한 경우 예외 처리
         if mode == 'internal' :
             blockchain = generateGenesisBlock()
             importedBlockchain.append(blockchain)
@@ -164,11 +167,11 @@ def readBlockchain(blockchainFilePath, mode = 'internal'):
             return None
 
 def updateTx(blockData) :
-
+    # 정규 표현식을 이용하여 거래 번호를 찾는다.
     phrase = re.compile(r"\w+[-]\w+[-]\w+[-]\w+[-]\w+") # [6b3b3c1e-858d-4e3b-b012-8faac98b49a8]UserID hwang sent 333 bitTokens to UserID kim.
     matchList = phrase.findall(blockData.data)
 
-    if len(matchList) == 0 :
+    if len(matchList) == 0 :    # 매칭되는 거래 고유 번호가 없는 경우
         print ("No Match Found! " + str(blockData.data) + "block idx: " + str(blockData.index))
         return
 
@@ -178,11 +181,13 @@ def updateTx(blockData) :
         reader = csv.reader(csvfile)
         writer = csv.writer(tempfile)
         for row in reader:
+            # 거래 데이터 중 블록에 확증된 거래 번호와 일치하는 경우
             if row[4] in matchList:
                 print('updating row : ', row[4])
-                row[0] = 1
+                row[0] = 1    # 해당 거래의 확증 여부 값을 1로 설정
             writer.writerow(row)
 
+    # 기존 거래 데이터 파일을 거래 번호를 업데이트한 파일로 교체
     shutil.move(tempfile.name, g_txFileName)
     csvfile.close()
     tempfile.close()
@@ -248,7 +253,7 @@ def readTx(txFilePath):
         with open(txFilePath, 'r',  newline='') as file:
             txReader = csv.reader(file)
             for row in txReader:
-                if row[0] == '0': # find unmined txData
+                if row[0] == '0': # find unmined txData    # 채굴 되지 않은 거래 데이터를 조회
                     line = txData(row[0],row[1],row[2],row[3],row[4])
                     importedTx.append(line)
         print("Pulling txData from csv...")
@@ -269,30 +274,30 @@ def getTxData():
     return strTxData
 
 def mineNewBlock(difficulty=g_difficulty, blockchainPath=g_bcFileName):
-    blockchain = readBlockchain(blockchainPath)
-    strTxData = getTxData()
-    if strTxData == '' :
+    blockchain = readBlockchain(blockchainPath)    # 최신 블록체인 조회
+    strTxData = getTxData()    # 거래 데이터 조회
+    if strTxData == '' :    # 거래 데이터가 없을 경우 리턴
         print('No TxData Found. Mining aborted')
         return
-
+    
     timestamp = time.time()
     proof = 0
     newBlockFound = False
 
     print('Mining a block...')
 
-    while not newBlockFound:
+    while not newBlockFound:    # 작업 증명
         newBlockAttempt = generateNextBlock(blockchain, strTxData, timestamp, proof)
-        if newBlockAttempt.currentHash[0:difficulty] == '0' * difficulty:
+        if newBlockAttempt.currentHash[0:difficulty] == '0' * difficulty:    # 난이도 만족 여부
             stopTime = time.time()
             timer = stopTime - timestamp
             print('New block found with proof', proof, 'in', round(timer, 2), 'seconds.')
-            newBlockFound = True
+            newBlockFound = True    # 난이도 만족시 반복문 종료
         else:
-            proof += 1
+            proof += 1    # 난이도 불충족시 작업 증명 횟수 1 증가
 
     blockchain.append(newBlockAttempt)
-    writeBlockchain(blockchain)
+    writeBlockchain(blockchain)    # 난이도를 만족하는 블록 채굴시 블록체인에 추가
 
 def mine():
     mineNewBlock()
@@ -729,8 +734,8 @@ class myHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
-                t = threading.Thread(target=mine)
-                t.start()
+                t = threading.Thread(target=mine)    # 쓰레드로 mine 함수를 호출
+                t.start()    # 쓰레드 시작
                 data.append("{mining is underway:check later by calling /block/getBlockData}")
                 self.wfile.write(bytes(json.dumps(data, sort_keys=True, indent=4), "utf-8"))
             else:
@@ -827,12 +832,12 @@ class myHandler(BaseHTTPRequestHandler):
             elif None != re.search('/block/newtx', self.path):
                 ctype, pdict = cgi.parse_header(self.headers['content-type'])
                 if ctype == 'application/json':
-                    content_length = int(self.headers['Content-Length'])
-                    post_data = self.rfile.read(content_length)
-                    receivedData = post_data.decode('utf-8')
-                    print(type(receivedData))
-                    tempDict = json.loads(receivedData)
-                    res = newtx(tempDict)
+                    content_length = int(self.headers['Content-Length'])    # 본문의 크기 확인
+                    post_data = self.rfile.read(content_length)    # 본문 읽어 들이기
+                    receivedData = post_data.decode('utf-8')    # utf-8로 디코딩
+                    print(type(receivedData))    # 딕셔너리 형식으로 자료형 변환
+                    tempDict = json.loads(receivedData)    # 거래 데이터 추가
+                    res = newtx(tempDict)    # 거래 데이터 정상 추가된 경우
                     if  res == 1 :
                         tempDict.append("accepted : it will be mined later")
                         self.wfile.write(bytes(json.dumps(tempDict), "utf-8"))
